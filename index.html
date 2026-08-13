@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>レンタル料金シミュレーター</title>
+  <style>
+    :root {
+      --primary-color: #007bff;
+      --bg-color: #f8f9fa;
+      --card-bg: #ffffff;
+      --text-color: #333333;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      margin: 0;
+      padding: 16px;
+      display: flex;
+      justify-content: center;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 480px;
+      background: var(--card-bg);
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    h1 {
+      font-size: 1.25rem;
+      text-align: center;
+      margin-bottom: 20px;
+      color: var(--primary-color);
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: block;
+      font-weight: bold;
+      margin-bottom: 6px;
+      font-size: 0.9rem;
+    }
+
+    input[type="date"], select {
+      width: 100%;
+      padding: 10px;
+      font-size: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      box-sizing: border-box;
+      background-color: #fff;
+    }
+
+    .option-group {
+      background-color: #f1f3f5;
+      padding: 12px;
+      border-radius: 8px;
+      margin-top: 12px;
+    }
+
+    .result-card {
+      margin-top: 24px;
+      padding: 16px;
+      background-color: #e7f5ff;
+      border: 1px solid #a5d8ff;
+      border-radius: 8px;
+    }
+
+    .result-item {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 0.95rem;
+    }
+
+    .result-total {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 2px solid #74c0fc;
+      font-weight: bold;
+      font-size: 1.2rem;
+      color: #1864ab;
+    }
+
+    .note {
+      font-size: 0.8rem;
+      color: #666;
+      margin-top: 8px;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>レンタル料金シミュレーター</h1>
+
+  <div class="form-group">
+    <label for="startDate">貸出開始日</label>
+    <input type="date" id="startDate" onchange="calculateRate()">
+  </div>
+
+  <div class="form-group">
+    <label for="endDate">返却日</label>
+    <input type="date" id="endDate" onchange="calculateRate()">
+  </div>
+
+  <div class="option-group" id="optionContainer">
+    <label for="optionSelect">8日目オプション選択</label>
+    <select id="optionSelect" onchange="calculateRate()">
+      <option value="0">なし（0円）</option>
+      <option value="12100">テントケージ（M）（12,100円）</option>
+      <option value="11000">テントケージ（S）（11,000円）</option>
+      <option value="6600">リユースケージ（6,600円）</option>
+    </select>
+    <div class="note">※レンタル期間が8日以上の場合に対象となります。</div>
+  </div>
+
+  <div class="result-card">
+    <div class="result-item">
+      <span>ご利用日数:</span>
+      <span id="totalDays">0 日</span>
+    </div>
+    <div class="result-item">
+      <span>基本レンタル料:</span>
+      <span id="baseFee">0 円</span>
+    </div>
+    <div class="result-item">
+      <span>オプション料金:</span>
+      <span id="optionFee">0 円</span>
+    </div>
+    <div class="result-total">
+      <span>合計料金:</span>
+      <span id="totalFee">0 円</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 初期値（今日〜明日）をセット
+  window.onload = function() {
+    const today = new Date();
+    const tomorrow = new Date();
+    tomorrow.setDate(today.getDate() + 1);
+
+    document.getElementById('startDate').value = formatDate(today);
+    document.getElementById('endDate').value = formatDate(tomorrow);
+
+    calculateRate();
+  };
+
+  function formatDate(date) {
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  function calculateRate() {
+    const startStr = document.getElementById('startDate').value;
+    const endStr = document.getElementById('endDate').value;
+    const optionVal = parseInt(document.getElementById('optionSelect').value, 10);
+
+    if (!startStr || !endStr) return;
+
+    const start = new Date(startStr);
+    const end = new Date(endStr);
+
+    if (end < start) {
+      alert('返却日は開始日以降の日付を選択してください。');
+      return;
+    }
+
+    // 日数計算（開始日と返却日を含める場合: (end - start)/86400000 + 1）
+    const diffTime = Math.abs(end - start);
+    const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+    // 月ごとの日数を集計して月上限（13,200円）を適用する計算
+    let baseFee = 0;
+    let currentDate = new Date(start);
+
+    // 月毎の日数をカウントするマップ
+    const monthDayCounts = {};
+
+    for (let i = 0; i < totalDays; i++) {
+      const monthKey = `${currentDate.getFullYear()}-${currentDate.getMonth() + 1}`;
+      monthDayCounts[monthKey] = (monthDayCounts[monthKey] || 0) + 1;
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    // 月ごとに上限料金（最大13,200円 = 20分日）を適用して合算
+    for (const key in monthDayCounts) {
+      const daysInMonth = monthDayCounts[key];
+      const monthFee = Math.min(daysInMonth * 660, 13200);
+      baseFee += monthFee;
+    }
+
+    // オプション料金（8日以上利用時のみ適用）
+    let activeOptionFee = 0;
+    const optionContainer = document.getElementById('optionContainer');
+
+    if (totalDays >= 8) {
+      activeOptionFee = optionVal;
+      optionContainer.style.opacity = '1';
+      optionContainer.style.pointerEvents = 'auto';
+    } else {
+      activeOptionFee = 0;
+      optionContainer.style.opacity = '0.5';
+      optionContainer.style.pointerEvents = 'none';
+      document.getElementById('optionSelect').value = "0";
+    }
+
+    const totalFee = baseFee + activeOptionFee;
+
+    // 画面表示の更新
+    document.getElementById('totalDays').innerText = `${totalDays} 日`;
+    document.getElementById('baseFee').innerText = `${baseFee.toLocaleString()} 円`;
+    document.getElementById('optionFee').innerText = `${activeOptionFee.toLocaleString()} 円`;
+    document.getElementById('totalFee').innerText = `${totalFee.toLocaleString()} 円`;
+  }
+</script>
+
+</body>
+</html>
